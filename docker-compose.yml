@@ -1,0 +1,12 @@
+version: '2'
+
+services:
+  www:
+    build: .
+    volumes:
+      - ./src:/www/:ro
+      - /Users/nxp34230/nxp/Cooperative Innovation Projects Admin - Dokumente/Projects Administration/40_projects/42_Running_Projects:/foldercheck/:ro
+#    command: php /renamer/app/scripts/renamer.php
+    command: php -S 0.0.0.0:80 -t /www/
+    ports:
+      - "4081:80"
