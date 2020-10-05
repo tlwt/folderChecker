@@ -1,64 +1,139 @@
 <?php
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
 
-ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+class folderCompare {
 
-function listDirContent($dir, $level = 1) {
-  $hideFiles = array(".", "..", ".DS_Store","Project IOs online.url");
-  $dirEntry = scandir($dir, SCANDIR_SORT_ASCENDING);
+    /**
+     * constructor
+     **/
+    function folderCompare() {
+      $this->templateFolder = '/template';
+      $this->projectFolder = '/foldercheck';
+      $this->ignoreCasing = true;
 
-  // counting files in dir
-  $fileCount = 0;
-  if (!is_array($dirEntry)) return false;
-  foreach ($dirEntry as $key => $value) {
-    $valueWithDir = $dir. "/" . $value;
-
-    // remove hidding files
-    if (!in_array($value,$hideFiles)) {
-      if (is_dir($valueWithDir)) {
-        $filearray[$value] = listDirContent($valueWithDir, $level+1);
-      }
-      if (is_file($valueWithDir)) {
-        $filearray[$value] = $fileCount;
-      }
-
+      $this->hideFilesFolders = array("..", ".DS_Store","Project IOs online.url");
     }
 
-    $fileCount++;
-  }
-  return $filearray;
-}
+    // reads a directory into an array and puts number of files etc. in it as well
 
-// output
-function outputResults ($res,$level=0) {
-  $loopCounter=0;
-  if (!is_array($res)) return false;
-  foreach ($res as $key => $value) {
+    function folderToArray($folder="") {
+      $rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($folder));
+      $folderArray = array();
+      foreach ($rii as $entry) {
+        // check if entries need to be ignored
+        if (!in_array(basename($entry), $this->hideFilesFolders) &&
 
-    // magic to remove unneeded lines
-    if($loopCounter>0) echo "<tr>";
-    if ($loopCounter>0 && $level> 0)
-      echo str_repeat("<td></td>",$level);
-
-    // setting font color to highlight probable errors
-    $fontColor = "orange";
-    if($value!=0) $fontColor="green";
-
-    // providing link to top url
-    $link = "";
-    if ($level == 0) $link = '<a href="https://nxp1.sharepoint.com/:f:/r/sites/cipadmin/Shared%20Documents/Projects%20Administration/40_projects/42_Running_Projects/' . $key . '"> [Go]</a>';
-
-    // generating output
-    echo "<td><font color=\"$fontColor\">$key $link</font></td>";
-    outputResults($value, $level+1);
-    if ($loopCounter > 0) {
-      echo "</tr>";
+        is_dir($entry)) {
+          $fullPath = strval($entry);
+          $shortPath = str_replace($folder, "", $entry);
+          $folderInfo['files'] = glob("$fullPath/*.*");
+          $folderInfo['numberOfFiles'] = count($folderInfo['files']);
+          $folderInfo['numberOfSubfolders'] = count( glob("$fullPath/*", GLOB_ONLYDIR) );
+          $folderInfo['fullPath'] = $fullPath;
+          // putting payload into archive
+          $folderArray[$shortPath] = $folderInfo;
+        }
+      }
+      // sort based on array
+      ksort($folderArray, SORT_REGULAR);
+      return $folderArray;
     }
-    $loopCounter++;
 
-  }
+    function returnListOfFiles($array) {
+      foreach($array as $key => $value) {
+        $res = preg_match('/^(due )([0-9]{4}-[0-9]{2}-[0-9]{2})\.txt/', basename($value), $match);
+        if ($res == 1) {
+          $dueDays = floor((strtotime($match[2]) - time())/86400);
+          if ($dueDays<0) $dueStatus = "❌ Over ";
+          if ($dueDays>0) $dueStatus = "🟡 Soon";
+          if ($dueDays>30) $dueStatus = "✅";
+
+          $returnString = "<li>📅 $dueStatus due in <b>$dueDays days</b> on " . $match[2];
+        }
+        else
+          $returnString .= "<li>" . basename($value);
+      }
+      return $returnString;
+    }
+
+    function endsWith($haystack, $needle)
+    {
+        $needle = $needle ."/.";
+        $length = strlen($needle);
+        return (substr($haystack, -$length) === $needle);
+    }
+
+    function folderStatus($folder) {
+      if ($folder['numberOfFiles'] == 1) return '<span title="ok">✅</span>';
+      if ($folder['numberOfSubfolders']>0) return '<span title="has subdirectories - check those">ℹ️</span>';
+      if ($folder['numberOfFiles'] == 0) return '<span title="no file found - please put not applicable.txt in the directory in case not needed">❌</span>';
+      if ($this->endsWith($folder['fullPath'],"work")) return '<span title="archive folder not checked for sanity">🗄</span>️';
+      if ($this->endsWith($folder['fullPath'],"archive")) return '<span title="archive folder not checked for sanity">🗄</span>️';
+
+      return '<span title="too many files - please move irrelevant files to archive subdirectory">🟡</span>';
+    }
+
+
+    function compareTwoFolders($template, $project) {
+      // reading template folder
+      $template = $this->folderToArray($template);
+      if ($this->ignoreCasing) $template = array_change_key_case($template);
+
+      // reading project folder
+      $folder = $this->folderToArray($project);
+      if ($this->ignoreCasing) $folder = array_change_key_case($folder);
+
+      // finding additional folders in project folder
+      $additional = array_diff_key($folder, $template);
+
+      // finding missing folders in project folder
+      $missing =  array_diff_key($template, $folder);
+      ksort($missing);
+
+      echo '<table data-name="mytable" class="table-show">';
+      echo '<thead><tr><td><span title="Sharepoint Folder">Folder</span></td><td><span title="Comparing the folder to our template structure">Tmplt</span></td><td><span title="Number of files ok in folder?">#</span></td><td><span title="List of files in directory">files</span></td></tr></thead>';
+      foreach ($folder as $entry => $files) {
+          // does the folder match a folder within the template directory
+          if (array_key_exists($entry,$template)) $tmpFolder = '<span title="required folder exists">✅</span>';
+
+          // is this folder an additional folder
+          if (array_key_exists($entry, $additional)) $tmpFolder = '<span title="additional folder not required by template directory">➕</span>';
+
+          // number of file
+          $folderStatus = $this->folderStatus( $files);
+
+          // file
+          $fileList = $this->returnListOfFiles($files['files']);
+
+          // output
+          echo "<tr><td>$entry</td><td>$tmpFolder</td><td>$folderStatus</td><td>$fileList</td></tr>";
+
+      }
+
+      foreach ($missing as $entry => $files) {
+        echo "<tr><td>$entry</td>" .'<td><span title="required folder missing">❌</span></td><td>-</td><td>--</td></tr>';
+        }
+    echo "</table>";
+    }
+
+    function run ($folder="") {
+        if (empty($folder)) {
+          $projects = scandir ($this->projectFolder);
+          foreach ($projects as $project) {
+            if (!in_array(basename($project), $this->hideFilesFolders) && $project != ".") {
+              echo "<h1>" . $project . '</h1> <li><a href="/?folder=' . htmlentities($project) . '">show only this project</a>';
+
+              $this->compareTwoFolders($this->templateFolder, $this->projectFolder . "/$project");
+            }
+          }
+        } else {
+          echo "<h1>" . $folder . "</h1>";
+          $this->compareTwoFolders($this->templateFolder, $this->projectFolder . "/$folder");
+        }
+    }
+
+
 }
-
-$res = listDirContent("/foldercheck/");
 ?>
 
 <html>
@@ -76,7 +151,7 @@ $res = listDirContent("/foldercheck/");
 /* PRESENTATONAL STYLES */
 body {
   background: #D3D3D3;
-  color: #2F4F4F;
+  color: #000;
   font-family: Helvetica;
 }
 
@@ -88,7 +163,7 @@ td {
   background: #fff;
   border: 1px solid #999;
   padding: 10px 15px;
-  color: green;
+  color: black;
   cursor: pointer;
 }
 
@@ -108,11 +183,33 @@ td:hover {
 </ul>
 To get directly to the corresponding sharepoint - click on the GO link behind the project name.
 </p>
+<p> <input type="text" id="myInput" onkeyup="myFunction()" placeholder="Search for ..." title="Type in a name"></p>
 
-<table class="table-show">
 <?php
-  outputResults($res);
+  $fci = new folderCompare();
+  $fci->run($_GET['folder']);
 ?>
-</table>
+
+<script>
+function myFunction() {
+  var input, filter, table, tr, td, i,alltables;
+    alltables = document.querySelectorAll("table[data-name=mytable]");
+  input = document.getElementById("myInput");
+  filter = input.value.toUpperCase();
+  alltables.forEach(function(table){
+      tr = table.getElementsByTagName("tr");
+      for (i = 0; i < tr.length; i++) {
+        td = tr[i].getElementsByTagName("td")[0];
+        if (td) {
+          if (td.innerHTML.toUpperCase().indexOf(filter) > -1) {
+            tr[i].style.display = "";
+          } else {
+            tr[i].style.display = "none";
+          }
+        }
+      }
+  });
+}
+</script>
 </body>
 </html>
