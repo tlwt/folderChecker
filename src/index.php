@@ -5,18 +5,56 @@ class folderCompare {
 
     /**
      * constructor
+     * @param none
+     * @return none
+     * @brief initialized the folder comparisson.
      **/
-    function folderCompare() {
+    function __construct() {
       $this->templateFolder = '/template';
       $this->projectFolder = '/foldercheck';
       $this->ignoreCasing = true;
 
+      if($this->doesNotExistOrEmpty($this->templateFolder)) $this->error("Template folder is empty");
+      if($this->doesNotExistOrEmpty($this->projectFolder)) $this->error("Project folder is empty");
+
       $this->hideFilesFolders = array("..", ".DS_Store","Project IOs online.url");
     }
 
-    // reads a directory into an array and puts number of files etc. in it as well
+    /**
+     * @brief function check if a directory is empty or does not exist
+     * @param string full path of directory to check
+     * @retval false: if files are in folder
+     * @retval true: if no files in folder or folder does not exist
+     **/
+    private function doesNotExistOrEmpty($dirname)
+    {
+      if (!is_dir($dirname)) return true;
+      foreach (scandir($dirname) as $file) {
+        if (!in_array($file, array('.','..','.DS_Store'))) return false;
+      }
+      return true;
+    }
 
-    function folderToArray($folder="") {
+    /**
+     * @brief formats error output, so it becomes readable on the screen. Halts program after output.
+     * @param string error message to display
+     * @return none
+     **/
+    private function error($msg) {
+      echo '<font color="red"><h1>Error</h1>';
+      echo "$msg";
+      echo "</font>";
+      die();
+    }
+
+    /**
+     * reads and sorts a directory into an array and puts number of files etc. in it as well.
+     * Adds attributed to the array about the number of files in subfolder as well as the full path.
+     * @brief reads a directory into an array and generates information
+     * @param string full path to $folder which is read into an array.
+     * @return array with all folder entries
+     **/
+    private function folderToArray($folder="") {
       $rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($folder));
       $folderArray = array();
       foreach ($rii as $entry) {
@@ -39,7 +77,12 @@ class folderCompare {
       return $folderArray;
     }
 
-    function returnListOfFiles($array) {
+    /**
+     * prints list in folder
+     * @param array containing the folder array to process.
+     * @return string containing output html of all files in directory
+     **/
+    private function returnListOfFiles($array) {
       foreach($array as $key => $value) {
         $res = preg_match('/^(due )([0-9]{4}-[0-9]{2}-[0-9]{2})\.txt/', basename($value), $match);
         if ($res == 1) {
@@ -56,14 +99,29 @@ class folderCompare {
       return $returnString;
     }
 
-    function endsWith($haystack, $needle)
+    /**
+     * checks if a haystack string ends with a needle string. This is used to to identify work and archive folders.
+     * @brief checks if a string ends with a keyword like archive or work
+     * @param $string haystack containing  the haystack string
+     * @param $string needle containing the needle string
+     * @return boolean containing the result.
+     * @retval false: if not found
+     * @retval true: if found
+     **/
+    private function endsWith($haystack, $needle)
     {
         $needle = $needle ."/.";
         $length = strlen($needle);
         return (substr($haystack, -$length) === $needle);
     }
 
-    function folderStatus($folder) {
+    /**
+     * This function determins the folder status. E.g. a green check mark if everything is ok or a yellow warning if more than one file has been found.
+     * @brief evaluates and outputs the status of a folder (green, orange, red)
+     * @param $string full string of path to check
+     * @return string html string containing the folder status.
+     **/
+    private function folderStatus($folder) {
       if ($folder['numberOfFiles'] == 1) return '<span title="ok">✅</span>';
       if ($folder['numberOfSubfolders']>0) return '<span title="has subdirectories - check those">ℹ️</span>';
       if ($folder['numberOfFiles'] == 0) return '<span title="no file found - please put not applicable.txt in the directory in case not needed">❌</span>';
@@ -73,8 +131,13 @@ class folderCompare {
       return '<span title="too many files - please move irrelevant files to archive subdirectory">🟡</span>';
     }
 
-
-    function compareTwoFolders($template, $project) {
+    /**
+     * compares the provided template folder with the actual project folder(s) and outputs html
+     * @param string $template containing the full url of the template folder
+     * @param string $project contains the corresponding project folder
+     * @return none
+     **/
+    private function compareTwoFolders($template, $project) {
       // reading template folder
       $template = $this->folderToArray($template);
       if ($this->ignoreCasing) $template = array_change_key_case($template);
@@ -116,6 +179,13 @@ class folderCompare {
     echo "</table>";
     }
 
+
+    /**
+     * public function kicking of the folder comparisson.
+     * @brief starting the comparisson procedure
+     * @param string if a string is provided, just that folder is compared. If no string is provided all folders will be compared.
+     * @return none.
+     **/
     function run ($folder="") {
         if (empty($folder)) {
           $projects = scandir ($this->projectFolder);

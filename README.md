@@ -1,5 +1,7 @@
 # folderChecker
 
+![consider it GmbH](https://img.shields.io/badge/project%20by-CIT-orange)
+
 When managing multiple projects, a coherent folder structure is essential, so that in case of an emergency anybody can take over. This is what the folderChecker does. It compares project directories against a template directory.
 
 Some additional checks it does:
